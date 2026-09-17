@@ -19,6 +19,7 @@ package com.itsaky.androidide.plugins
 
 import com.android.build.gradle.BaseExtension
 import com.itsaky.androidide.build.config.isFDroidBuild
+import com.itsaky.androidide.plugins.conf.isTermuxJdk
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -42,6 +43,18 @@ class AndroidIDEPlugin : Plugin<Project> {
 
       val isAndroidModule = plugins.hasPlugin("com.android.application") ||
           plugins.hasPlugin("com.android.library")
+
+      if (isAndroidModule && isTermuxJdk()) {
+        // AGP 8.8 defaults to Build Tools 35.0.0. The SDK package installed by
+        // the on-device toolchain contains an x86-64 AIDL binary there, which
+        // cannot execute on Android/ARM64. Build Tools 36.0.0 contains the
+        // native AArch64 AIDL used by Code on the Go. Select it for every
+        // Android module so AIDL compilation is reproducible on-device without
+        // modifying SDK binaries. Desktop/CI builds keep AGP's normal choice.
+        val baseExtension = extensions.getByType(BaseExtension::class.java)
+        baseExtension.buildToolsVersion = "36.0.0"
+        logger.lifecycle("Using Android Build Tools 36.0.0 for on-device build in ${project.path}")
+      }
 
       if (isAndroidModule && !isFDroidBuild) {
         // setup signing configuration
