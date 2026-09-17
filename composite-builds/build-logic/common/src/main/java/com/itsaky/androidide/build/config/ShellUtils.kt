@@ -8,7 +8,28 @@ import java.io.File
  * @author Akash Yadav
  */
 object ShellUtils {
-	fun which(cmd: String): String? = shC("which '$cmd'")
+	/**
+	 * Resolve an executable directly from PATH.
+	 *
+	 * Do not invoke the external `which` command here. On Android/Termux,
+	 * Gradle's ProcessBuilder environment can have a valid PATH while the
+	 * `which` utility itself is unavailable, causing on-device tools such as
+	 * protoc to be incorrectly treated as missing.
+	 */
+	fun which(cmd: String): String? {
+		if (cmd.isBlank() || cmd.contains(File.separatorChar)) {
+			return null
+		}
+
+		val path = System.getenv("PATH") ?: return null
+		return path
+			.split(File.pathSeparatorChar)
+			.asSequence()
+			.filter { it.isNotBlank() }
+			.map { File(it, cmd) }
+			.firstOrNull { it.isFile && it.canExecute() }
+			?.absolutePath
+	}
 
 	fun shC(
 		cmd: String,
