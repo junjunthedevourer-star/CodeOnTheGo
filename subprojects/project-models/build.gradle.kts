@@ -1,10 +1,23 @@
 import com.google.protobuf.gradle.id
 import com.itsaky.androidide.plugins.conf.configureProtoc
+import com.itsaky.androidide.plugins.conf.isTermuxJdk
 
 plugins {
 	id("java-library")
 	alias(libs.plugins.kotlin.jvm)
 	alias(libs.plugins.google.protobuf)
+}
+
+// Android shared storage is mounted noexec. The protobuf Gradle plugin creates an
+// executable trampoline script for JAR-based protoc plugins under build/scripts.
+// Keep this module's build directory in the app-private HOME when building with
+// the Termux JDK so protoc can execute protoc-gen-kotlin-ext normally.
+if (isTermuxJdk()) {
+	layout.buildDirectory.set(
+		layout.projectDirectory.dir(
+			System.getProperty("user.home") + "/.cogo-build/project-models",
+		),
+	)
 }
 
 configureProtoc(protobuf = protobuf, protocVersion = libs.versions.protobuf.asProvider())
