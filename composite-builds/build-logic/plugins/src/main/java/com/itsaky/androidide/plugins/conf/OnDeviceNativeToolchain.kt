@@ -22,8 +22,19 @@ fun Project.prepareOnDeviceNdkHost(ndkVersion: String): String = synchronized(on
     val prebuiltRoot = ndkRoot.resolve("toolchains/llvm/prebuilt")
     val hostRoot = prebuiltRoot.resolve(hostTag)
     val hostBin = hostRoot.resolve("bin")
+    // The host *executables* come from PREFIX, but Android target headers and
+    // startup objects must come from the NDK's unified target sysroot. PREFIX is
+    // laid out differently: its include/linux/types.h cannot find asm/types.h
+    // when passed directly as an NDK --sysroot.
+    val ndkTargetSysroot = prebuiltRoot.resolve("linux-x86_64/sysroot")
 
     require(ndkRoot.isDirectory) { "Android NDK $ndkVersion not found at $ndkRoot" }
+    require(ndkTargetSysroot.resolve("usr/include/dirent.h").isFile) {
+        "NDK target sysroot headers not found at $ndkTargetSysroot"
+    }
+    require(ndkTargetSysroot.resolve("usr/include/aarch64-linux-android/asm/types.h").isFile) {
+        "NDK ARM64 target headers not found at $ndkTargetSysroot"
+    }
     require(prefixBin.resolve("clang").canExecute()) { "Native clang not found at ${prefixBin.resolve("clang")}" }
     require(prefixBin.resolve("clang++").canExecute()) { "Native clang++ not found at ${prefixBin.resolve("clang++")}" }
 
@@ -65,9 +76,11 @@ fun Project.prepareOnDeviceNdkHost(ndkVersion: String): String = synchronized(on
             if (target.exists()) replaceWithSymlink(hostBin.resolve(name), target)
         }
 
-    replaceWithSymlink(hostRoot.resolve("sysroot"), prefixDir)
-    // The legacy NDK CMake toolchain also constructs the path without a host tag.
-    replaceWithSymlink(prebuiltRoot.resolve("sysroot"), prefixDir)
-    logger.lifecycle("Using native Android LLVM host shim at $hostRoot")
+    // CMake compiles for Android targets: preserve NDK's ABI-specific headers,
+    // libc link stubs and CRT files, regardless of the Android host architecture.
+    replaceWithSymlink(hostRoot.resolve("sysroot"), ndkTargetSysroot)
+    // The legacy NDK CMake toolchain also constructs this path without a host tag.
+    replaceWithSymlink(prebuiltRoot.resolve("sysroot"), ndkTargetSysroot)
+    logger.lifecycle("Using native Android LLVM host shim at $hostRoot with NDK target sysroot $ndkTargetSysroot")
     hostTag
 }
