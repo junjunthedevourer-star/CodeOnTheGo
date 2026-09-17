@@ -22,11 +22,21 @@ fun Project.prepareOnDeviceNdkHost(ndkVersion: String): String = synchronized(on
     val prebuiltRoot = ndkRoot.resolve("toolchains/llvm/prebuilt")
     val hostRoot = prebuiltRoot.resolve(hostTag)
     val hostBin = hostRoot.resolve("bin")
-    // The host *executables* come from PREFIX, but Android target headers and
-    // startup objects must come from the NDK's unified target sysroot. PREFIX is
-    // laid out differently: its include/linux/types.h cannot find asm/types.h
-    // when passed directly as an NDK --sysroot.
-    val ndkTargetSysroot = prebuiltRoot.resolve("linux-x86_64/sysroot")
+
+    // The compiler executes on Android from PREFIX, but target headers, CRT files,
+    // compiler-rt, libatomic and libunwind must all come from the same NDK revision.
+    // PREFIX is laid out differently and has a different Clang resource directory.
+    val ndkDesktopHost = prebuiltRoot.resolve("linux-x86_64")
+    val ndkTargetSysroot = ndkDesktopHost.resolve("sysroot")
+    val ndkClangResourceDir = ndkDesktopHost.resolve("lib/clang").listFiles()
+        ?.filter { candidate ->
+            candidate.isDirectory &&
+                candidate.resolve("lib/linux/aarch64/libatomic.a").isFile &&
+                candidate.resolve("lib/linux/aarch64/libunwind.a").isFile &&
+                candidate.resolve("lib/linux/libclang_rt.builtins-aarch64-android.a").isFile
+        }
+        ?.maxByOrNull { it.name.toIntOrNull() ?: -1 }
+        ?: error("Cannot find NDK ARM64 compiler-rt, libatomic and libunwind archives under ${ndkDesktopHost.resolve("lib/clang")}")
 
     require(ndkRoot.isDirectory) { "Android NDK $ndkVersion not found at $ndkRoot" }
     require(ndkTargetSysroot.resolve("usr/include/dirent.h").isFile) {
@@ -62,7 +72,21 @@ fun Project.prepareOnDeviceNdkHost(ndkVersion: String): String = synchronized(on
         val wrapper = hostBin.resolve(name)
         if (Files.isSymbolicLink(wrapper.toPath())) Files.delete(wrapper.toPath())
         val realCompiler = prefixBin.resolve(name)
-        wrapper.writeText("#!/system/bin/sh\nexec \"${realCompiler.absolutePath}\" \"\$@\"\n")
+        // Select the archive directory for each target ABI; never link ARM64
+        // compiler-rt into an armeabi-v7a build. Clang's -resource-dir also
+        // redirects its implicit builtins and unwind runtime lookups to the NDK.
+        val runtimeRoot = ndkClangResourceDir.resolve("lib/linux")
+        wrapper.writeText(
+            "#!/system/bin/sh\n" +
+                "ndk_runtime_arch=aarch64\n" +
+                "for ndk_arg in \"\$@\"; do\n" +
+                "  case \"\$ndk_arg\" in\n" +
+                "    --target=arm*|-target=arm*) ndk_runtime_arch=arm ;;\n" +
+                "    --target=aarch64*|-target=aarch64*) ndk_runtime_arch=aarch64 ;;\n" +
+                "  esac\n" +
+                "done\n" +
+                "exec \"${realCompiler.absolutePath}\" -resource-dir \"${ndkClangResourceDir.absolutePath}\" -L\"${runtimeRoot.absolutePath}/\$ndk_runtime_arch\" \"\$@\"\n"
+        )
         require(wrapper.setExecutable(true, false) || wrapper.canExecute()) {
             "Unable to make compiler wrapper executable: $wrapper"
         }
@@ -76,11 +100,9 @@ fun Project.prepareOnDeviceNdkHost(ndkVersion: String): String = synchronized(on
             if (target.exists()) replaceWithSymlink(hostBin.resolve(name), target)
         }
 
-    // CMake compiles for Android targets: preserve NDK's ABI-specific headers,
-    // libc link stubs and CRT files, regardless of the Android host architecture.
     replaceWithSymlink(hostRoot.resolve("sysroot"), ndkTargetSysroot)
     // The legacy NDK CMake toolchain also constructs this path without a host tag.
     replaceWithSymlink(prebuiltRoot.resolve("sysroot"), ndkTargetSysroot)
-    logger.lifecycle("Using native Android LLVM host shim at $hostRoot with NDK target sysroot $ndkTargetSysroot")
+    logger.lifecycle("Using native Android LLVM host shim at $hostRoot with NDK sysroot $ndkTargetSysroot and compiler resources $ndkClangResourceDir")
     hostTag
 }
