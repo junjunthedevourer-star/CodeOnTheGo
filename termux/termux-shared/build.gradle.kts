@@ -37,6 +37,9 @@ android {
             cmake {
                 path = file("src/main/cpp/CMakeLists.txt")
                 version = "3.31.0+"
+                // layout.buildDirectory does not relocate AGP's separate .cxx staging.
+                // Keep build.ninja and CMake's regeneration timestamps off shared storage.
+                buildStagingDirectory = file("${System.getProperty("user.home")}/.cogo-cxx/termux-shared")
             }
         } else {
             ndkBuild {

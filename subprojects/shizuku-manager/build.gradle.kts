@@ -42,6 +42,11 @@ android {
 		cmake {
 			path = file("src/main/jni/CMakeLists.txt")
 			version = "3.31.0+"
+			// AGP keeps .cxx outside layout.buildDirectory. Relocate its Ninja files
+			// only for on-device builds; desktop builds retain the original staging.
+			if (onDeviceNdkHostTag != null) {
+				buildStagingDirectory = file("${System.getProperty("user.home")}/.cogo-cxx/shizuku-manager")
+			}
 		}
 	}
 }

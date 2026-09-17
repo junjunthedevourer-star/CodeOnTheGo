@@ -40,6 +40,8 @@ android {
             cmake {
                 path = file("src/main/jni/CMakeLists.txt")
                 version = "3.31.0+"
+                // CMake's Ninja files must live on private storage, not /storage/emulated.
+                buildStagingDirectory = file("${System.getProperty("user.home")}/.cogo-cxx/termux-emulator")
             }
         } else {
             ndkBuild {
