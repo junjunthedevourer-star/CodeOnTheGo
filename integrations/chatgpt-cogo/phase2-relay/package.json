@@ -1,0 +1,9 @@
+{
+  "name": "cogo-remote-bridge-contract",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node --test" },
+  "description": "Transport-independent contract and safety-policy foundation for CoGo's remote MCP relay"
+}
