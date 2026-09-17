@@ -13,11 +13,7 @@ plugins {
 // Keep this module's build directory in the app-private HOME when building with
 // the Termux JDK so protoc can execute protoc-gen-kotlin-ext normally.
 if (isTermuxJdk()) {
-	layout.buildDirectory.set(
-		layout.projectDirectory.dir(
-			System.getProperty("user.home") + "/.cogo-build/project-models",
-		),
-	)
+	layout.buildDirectory.set(file("${System.getProperty("user.home")}/.cogo-build/project-models"))
 }
 
 configureProtoc(protobuf = protobuf, protocVersion = libs.versions.protobuf.asProvider())
