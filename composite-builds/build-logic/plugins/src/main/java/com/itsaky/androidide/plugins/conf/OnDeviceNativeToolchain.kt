@@ -72,19 +72,24 @@ fun Project.prepareOnDeviceNdkHost(ndkVersion: String): String = synchronized(on
         val wrapper = hostBin.resolve(name)
         if (Files.isSymbolicLink(wrapper.toPath())) Files.delete(wrapper.toPath())
         val realCompiler = prefixBin.resolve(name)
-        // Select the archive directory for each target ABI; never link ARM64
-        // compiler-rt into an armeabi-v7a build. Clang's -resource-dir also
-        // redirects its implicit builtins and unwind runtime lookups to the NDK.
+        // Select the NDK archive directory per target ABI. Add -L only when
+        // linking: Clang can warn about unused linker flags in -Werror -c builds.
+        // -resource-dir also redirects implicit builtins/unwind lookup to the NDK.
         val runtimeRoot = ndkClangResourceDir.resolve("lib/linux")
         wrapper.writeText(
             "#!/system/bin/sh\n" +
                 "ndk_runtime_arch=aarch64\n" +
+                "ndk_compile_only=0\n" +
                 "for ndk_arg in \"\$@\"; do\n" +
                 "  case \"\$ndk_arg\" in\n" +
                 "    --target=arm*|-target=arm*) ndk_runtime_arch=arm ;;\n" +
                 "    --target=aarch64*|-target=aarch64*) ndk_runtime_arch=aarch64 ;;\n" +
+                "    -c|-E|-S|-fsyntax-only) ndk_compile_only=1 ;;\n" +
                 "  esac\n" +
                 "done\n" +
+                "if [ \"\$ndk_compile_only\" -eq 1 ]; then\n" +
+                "  exec \"${realCompiler.absolutePath}\" -resource-dir \"${ndkClangResourceDir.absolutePath}\" \"\$@\"\n" +
+                "fi\n" +
                 "exec \"${realCompiler.absolutePath}\" -resource-dir \"${ndkClangResourceDir.absolutePath}\" -L\"${runtimeRoot.absolutePath}/\$ndk_runtime_arch\" \"\$@\"\n"
         )
         require(wrapper.setExecutable(true, false) || wrapper.canExecute()) {
