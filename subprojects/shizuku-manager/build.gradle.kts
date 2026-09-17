@@ -1,12 +1,21 @@
 @file:Suppress("UnstableApiUsage")
 
 import com.itsaky.androidide.build.config.BuildConfig
+import com.itsaky.androidide.plugins.conf.isTermuxJdk
 
 plugins {
 	id("com.android.library")
 	id("org.jetbrains.kotlin.android")
 	id("dev.rikka.tools.refine")
 	id("dev.rikka.tools.materialthemebuilder")
+}
+
+// Android shared storage is mounted noexec. AGP's native-build integration creates
+// an executable prefab_command under this module's build/intermediates/cxx tree.
+// Keep the module build directory in app-private HOME for on-device builds so the
+// generated command can be executed by Gradle.
+if (isTermuxJdk()) {
+	layout.buildDirectory.set(file("${System.getProperty("user.home")}/.cogo-build/shizuku-manager"))
 }
 
 android {
